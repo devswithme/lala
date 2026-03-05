@@ -30,6 +30,7 @@ import {
   insertGiftClaim,
   decrementGiftEventRemaining,
   refillMood,
+  markQueueBypassed,
 } from "../db/index.js";
 import {
   ROOM_MESSAGES_TABLE,
@@ -37,11 +38,47 @@ import {
   IDENTITY_UNLOCK_PRICE,
   LALA_COFFEE_PRICE,
   GIFTS,
+  isBetaNow,
 } from "../config/index.js";
 import { overlapTags } from "../lib/matchmaking.js";
 import { makeBottleText } from "../ai/bottle.js";
 
 export function registerActions(bot, { sendSafeDM }) {
+  bot.action("beta_bypass", async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+      const userId = ctx.from.id;
+
+      if (!isBetaNow()) {
+        await ctx.reply(
+          "Bypass antrian hanya tersedia selama periode BETA Lala. Saat ini periode tersebut belum atau sudah lewat.",
+        );
+        return;
+      }
+
+      const price = 5000;
+      const { ok, balance } = await walletDeduct(userId, price);
+      if (!ok) {
+        await ctx.reply(
+          `Saldo kamu kurang untuk bypass antrian (butuh Rp ${price.toLocaleString(
+            "id-ID",
+          )}). Saldo kamu sekarang Rp ${balance.toLocaleString(
+            "id-ID",
+          )}.\nTopup dulu pakai /topup 10000 ya.`,
+        );
+        return;
+      }
+
+      await markQueueBypassed(userId);
+      await ctx.reply(
+        "Makasih udah traktir Lala! Akses kamu langsung dibuka, kamu bisa mulai curhat sekarang. 🌸",
+      );
+    } catch (err) {
+      console.error("beta_bypass error:", err);
+      await ctx.reply("Gagal memproses bypass antrian. Coba lagi ya.");
+    }
+  });
+
   bot.action("refill_mood", async (ctx) => {
     try {
       await ctx.answerCbQuery();

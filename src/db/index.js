@@ -133,6 +133,70 @@ export async function upsertSession(record) {
   if (error) throw error;
 }
 
+export async function assignQueuePositionForUser(userId) {
+  // Ensure we don't change existing positions on re-submit.
+  const { data: existing, error: existingErr } = await supabase
+    .from(SESSIONS_TABLE)
+    .select("user_id,queue_position")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (existingErr) throw existingErr;
+  if (existing?.queue_position != null) {
+    return existing.queue_position;
+  }
+
+  const { data: maxRow, error: maxErr } = await supabase
+    .from(SESSIONS_TABLE)
+    .select("queue_position")
+    .not("queue_position", "is", null)
+    .order("queue_position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (maxErr) throw maxErr;
+
+  const currentMax = typeof maxRow?.queue_position === "number" ? maxRow.queue_position : 0;
+  const nextPosition = currentMax + 1;
+
+  const now = new Date();
+  const payload = {
+    user_id: userId,
+    queue_position: nextPosition,
+    queue_signed_at: now,
+  };
+
+  const { error: upsertErr } = await supabase.from(SESSIONS_TABLE).upsert(payload);
+  if (upsertErr) throw upsertErr;
+  return nextPosition;
+}
+
+export async function getNextBetaBatch(limit) {
+  const { data, error } = await supabase
+    .from(SESSIONS_TABLE)
+    .select("user_id,queue_position,queue_signed_at")
+    .not("queue_position", "is", null)
+    .is("queue_activated_at", null)
+    .order("queue_position", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function markQueueActivated(userId) {
+  const { error } = await supabase
+    .from(SESSIONS_TABLE)
+    .update({ queue_activated_at: new Date() })
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function markQueueBypassed(userId) {
+  const { error } = await supabase
+    .from(SESSIONS_TABLE)
+    .update({ queue_bypassed: true, queue_activated_at: new Date() })
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
 // --- Mood Energy ---
 export async function getMood(userId) {
   const { data, error } = await supabase

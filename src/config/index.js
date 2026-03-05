@@ -11,8 +11,40 @@ export const OPENROUTER_API_KEY = env.OPENROUTER_API_KEY ?? "";
 export const XENDIT_API_KEY = env.XENDIT_API_KEY ?? "";
 export const NODE_ENV = env.NODE_ENV ?? "development";
 export const PORT = Number(env.PORT) || 3000;
+export const TALLY_SIGNING_SECRET = env.TALLY_SIGNING_SECRET ?? "";
 
 export const isProduction = NODE_ENV === "production";
+
+// Launch windows (UTC-based)
+const PRELAUNCH_END_RAW = env.PRELAUNCH_END ?? "2026-03-14T00:00:00Z";
+const BETA_END_RAW = env.BETA_END ?? "2026-03-31T23:59:59Z";
+const FULL_LAUNCH_START_RAW = env.FULL_LAUNCH_START ?? "2026-04-01T00:00:00Z";
+
+export const PRELAUNCH_END = new Date(PRELAUNCH_END_RAW);
+export const BETA_END = new Date(BETA_END_RAW);
+export const FULL_LAUNCH_START = new Date(FULL_LAUNCH_START_RAW);
+
+function nowUtcMs() {
+  return Date.now();
+}
+
+export function isPrelaunchNow() {
+  if (!isProduction) return false;
+  const now = nowUtcMs();
+  return now < PRELAUNCH_END.getTime();
+}
+
+export function isBetaNow() {
+  if (!isProduction) return false;
+  const now = nowUtcMs();
+  return now >= PRELAUNCH_END.getTime() && now <= BETA_END.getTime();
+}
+
+export function isFullLaunch() {
+  if (!isProduction) return false;
+  const now = nowUtcMs();
+  return now >= FULL_LAUNCH_START.getTime();
+}
 
 // Table names
 export const ROOMS_TABLE = "rooms";

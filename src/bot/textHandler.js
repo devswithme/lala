@@ -1,390 +1,144 @@
 import {
-  getActiveRoomByUserId,
-  getActiveGroupRoomByUserId,
-  otherUserId,
-} from "../db/index.js";
-import {
-  getLastRoomMessageAt,
-  getRecentRoomMessages,
-  insertRoomMessage,
-  getRoomMessageCount,
-  getGroupRoomMemberIds,
   getSession,
   upsertSession,
-  getMood,
   decrementMood,
-  ensureIdentityPermission,
-  ensureGroupIdentityPermission,
 } from "../db/index.js";
 import {
-  ROOM_MESSAGES_TABLE,
-  GROUP_ROOM_MESSAGES_TABLE,
+  isPrelaunchNow,
+  isBetaNow,
+  isFullLaunch,
+  PRELAUNCH_END,
 } from "../config/index.js";
-import { censorText, looksUnsafe, looksLikeIdentity } from "../lib/content.js";
-import { moderatorDecision } from "../ai/moderator.js";
 import {
   safeAiCurhat,
   buildCurhatSystemContent,
   parseCurhatResponse,
 } from "../ai/curhat.js";
-import {
-  SILENCE_ICEBREAK_MS,
-  IDENTITY_UNLOCK_PRICE,
-  CHEMISTRY_THRESHOLD,
-  CHEMISTRY_HINT_AT,
-  MOOD_LOW_THRESHOLD,
-  LALA_COFFEE_PRICE,
-} from "../config/index.js";
 
-export function registerTextHandler(bot, { sendSafeDM }) {
-  bot.on("text", async (ctx) => {
-    try {
-      const activeRoom = await getActiveRoomByUserId(ctx.from.id);
-      if (activeRoom) {
-        await handleOneToOneRoom(ctx, activeRoom, sendSafeDM);
-        return;
-      }
-
-      const activeGroupRoom = await getActiveGroupRoomByUserId(ctx.from.id);
-      if (activeGroupRoom) {
-        await handleGroupRoom(ctx, activeGroupRoom, sendSafeDM);
-        return;
-      }
-
-      await handleCurhat(ctx, sendSafeDM);
-    } catch (error) {
-      console.error("Gemini Error:", error);
-      await ctx.reply(
-        "Aduh, Lala lagi agak pusing.. Sapa aku lagi ya nanti? 🥺",
-      );
-    }
+function formatReleaseDate() {
+  return PRELAUNCH_END.toLocaleDateString("id-ID", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "Asia/Jakarta",
   });
 }
 
-async function handleOneToOneRoom(ctx, activeRoom, sendSafeDM) {
-  const fromId = ctx.from.id;
-  const toId = otherUserId(activeRoom, fromId);
-  const original = ctx.message.text ?? "";
+async function handleCurhat(ctx) {
+  const userId = ctx.from?.id;
+  const text = ctx.message?.text ?? "";
+  if (!userId || !text) return;
 
-  const identity = looksLikeIdentity(original);
-  if (identity.detected) {
-    const allowed = await ensureIdentityPermission(activeRoom.id, fromId);
-    if (!allowed) {
-      const count = await getRoomMessageCount(
-        activeRoom.id,
-        ROOM_MESSAGES_TABLE,
-      );
-      if (count >= CHEMISTRY_THRESHOLD) {
-        await ctx.reply(
-          "Identitas baru bisa dibuka kalau kalian berdua setuju. Klik tombol Kenalan ya – kalau kalian berdua sama-sama klik, Lala buka akses.",
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: "Kenalan",
-                    callback_data: `kenalan:${activeRoom.id}`,
-                  },
-                ],
-              ],
-            },
-          },
-        );
-      } else {
-        await ctx.reply(
-          "Demi keamanan, Lala tidak mengizinkan tukar identitas (nama/nomor/IG/username/email) di chat gratis.\n\nKalau kamu mau unlock, bayar sekali Rp 6.000 untuk room ini.",
-          {
-            reply_markup: {
-              inline_keyboard: [
-                [
-                  {
-                    text: `Unlock Identitas (Rp ${IDENTITY_UNLOCK_PRICE.toLocaleString("id-ID")})`,
-                    callback_data: `unlock_identity:${activeRoom.id}`,
-                  },
-                ],
-              ],
-            },
-          },
-        );
-      }
-      await sendSafeDM(
-        toId,
-        "[Pesan berisi identitas pribadi dan tidak dikirim.]",
-      );
-      return;
-    }
-  }
-
-  const lastAt = await getLastRoomMessageAt(activeRoom.id, ROOM_MESSAGES_TABLE);
-  const silenceMs = lastAt ? Date.now() - new Date(lastAt).getTime() : 0;
-  const unsafe = looksUnsafe(original);
-  const relayedText = unsafe
-    ? "[Pesan disensor oleh Lala]"
-    : censorText(original);
-
-  await insertRoomMessage(activeRoom.id, fromId, original, ROOM_MESSAGES_TABLE);
-  await sendSafeDM(toId, relayedText);
-
-  const count = await getRoomMessageCount(activeRoom.id, ROOM_MESSAGES_TABLE);
-  if (count === CHEMISTRY_HINT_AT) {
-    await sendSafeDM(
-      fromId,
-      `Chemistry: ${count}/${CHEMISTRY_THRESHOLD} – setengah jalan!`,
-    );
-    await sendSafeDM(
-      toId,
-      `Chemistry: ${count}/${CHEMISTRY_THRESHOLD} – setengah jalan!`,
-    );
-  } else if (count === CHEMISTRY_THRESHOLD) {
-    const announcement =
-      "Ciee, kalian berdua kayaknya nyambung banget nih! Lala udah buka akses buat kalian saling liat profil ya. Silakan klik tombol Kenalan kalau kalian berdua sama-sama setuju!";
-    await sendSafeDM(fromId, announcement, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "Kenalan", callback_data: `kenalan:${activeRoom.id}` }],
-        ],
-      },
-    });
-    await sendSafeDM(toId, announcement, {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "Kenalan", callback_data: `kenalan:${activeRoom.id}` }],
-        ],
-      },
-    });
-  }
-
-  const recent = await getRecentRoomMessages(
-    activeRoom.id,
-    10,
-    ROOM_MESSAGES_TABLE,
+  const session = await getSession(
+    userId,
+    "summary,history,gender,personality,queue_position,queue_activated_at,queue_bypassed",
   );
-  const lines = recent
-    .map((m) => {
-      const who =
-        m.user_id === fromId
-          ? "UserA"
-          : m.user_id === toId
-            ? "UserB"
-            : "System";
-      return `${who}: ${m.content}`;
-    })
-    .join("\n");
+  const queuePosition = session?.queue_position ?? null;
+  const queueActivatedAt = session?.queue_activated_at ?? null;
 
-  if (silenceMs > SILENCE_ICEBREAK_MS || unsafe) {
-    const decision = await moderatorDecision({
-      transcript: lines,
-      newMessage: original,
-      silenceMs,
-    });
-    if (decision.action === "icebreak" && decision.message) {
-      await sendSafeDM(fromId, `🌸 Lala: ${decision.message}`);
-      await sendSafeDM(toId, `🌸 Lala: ${decision.message}`);
-    } else if (decision.action === "warn") {
-      const warnMsg =
-        decision.message ||
-        "Tolong jaga kata-kata ya. Lala bakal sensor kalau ada yang kasar/mesum/menyakiti.";
-      await sendSafeDM(fromId, `⚠️ Lala: ${warnMsg}`);
-      await sendSafeDM(toId, `⚠️ Lala: ${warnMsg}`);
-    }
-  }
-}
-
-async function handleGroupRoom(ctx, activeGroupRoom, sendSafeDM) {
-  const fromId = ctx.from.id;
-  const original = ctx.message.text ?? "";
-  const memberIds = await getGroupRoomMemberIds(activeGroupRoom.id);
-  const otherIds = memberIds.filter((id) => id !== fromId);
-
-  const lastAt = await getLastRoomMessageAt(
-    activeGroupRoom.id,
-    GROUP_ROOM_MESSAGES_TABLE,
-  );
-  const silenceMs = lastAt ? Date.now() - new Date(lastAt).getTime() : 0;
-  const unsafe = looksUnsafe(original);
-  const identity = looksLikeIdentity(original);
-
-  if (identity.detected) {
-    const allowed = await ensureGroupIdentityPermission(
-      activeGroupRoom.id,
-      fromId,
-    );
-    if (!allowed) {
+  // --- Prelaunch: gate all AI with static messaging ---
+  if (isPrelaunchNow()) {
+    const releaseDate = formatReleaseDate();
+    if (queuePosition == null) {
       await ctx.reply(
-        "Demi keamanan, Lala menahan pesan yang berisi identitas (nama/nomor/IG/username/email).\n\nKalau kamu mau unlock identitas di grup ini, bayar sekali Rp 6.000.",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: `Unlock Identitas Grup (Rp ${IDENTITY_UNLOCK_PRICE.toLocaleString("id-ID")})`,
-                  callback_data: `unlock_group_identity:${activeGroupRoom.id}`,
-                },
-              ],
-            ],
-          },
-        },
+        `Makasih sudah mampir curhat ke Lala 🌸\n\nSaat ini Lala masih dalam tahap persiapan (prelaunch), jadi curhat AI-nya belum dibuka.\n\nBiar nanti pas Lala buka kamu bisa dapat giliran, isi dulu form kenalan lewat perintah /start ya. Setelah isi, kamu akan masuk antrian dan Lala kabari lagi menjelang rilis pada ${releaseDate}.`,
       );
-      for (const id of otherIds) {
-        await sendSafeDM(
-          id,
-          "[Pesan berisi identitas pribadi dan tidak dikirim.]",
-        );
-      }
       return;
     }
-  }
 
-  const relayedText = unsafe
-    ? "[Pesan disensor oleh Lala]"
-    : censorText(original);
-  await insertRoomMessage(
-    activeGroupRoom.id,
-    fromId,
-    original,
-    GROUP_ROOM_MESSAGES_TABLE,
-  );
-  for (const id of otherIds) {
-    await sendSafeDM(id, relayedText);
-  }
-
-  const recent = await getRecentRoomMessages(
-    activeGroupRoom.id,
-    10,
-    GROUP_ROOM_MESSAGES_TABLE,
-  );
-  const lines = recent
-    .map((m) => {
-      const who =
-        m.user_id === 0 ? "System" : m.user_id === fromId ? "Sender" : "Other";
-      return `${who}: ${m.content}`;
-    })
-    .join("\n");
-
-  if (silenceMs > SILENCE_ICEBREAK_MS || unsafe) {
-    const decision = await moderatorDecision({
-      transcript: lines,
-      newMessage: original,
-      silenceMs,
-    });
-    if (decision.action === "icebreak" && decision.message) {
-      for (const id of memberIds) {
-        await sendSafeDM(id, `🌸 Lala: ${decision.message}`);
-      }
-    } else if (decision.action === "warn") {
-      const warnMsg =
-        decision.message ||
-        "Tolong jaga kata-kata dan suasana obrolan ya. Lala bakal sensor kalau ada yang kasar/mesum/menyakiti.";
-      for (const id of memberIds) {
-        await sendSafeDM(id, `⚠️ Lala: ${warnMsg}`);
-      }
-    }
-  }
-}
-
-async function handleCurhat(ctx, sendSafeDM) {
-  const mood = await getMood(ctx.from.id);
-  if (mood < MOOD_LOW_THRESHOLD) {
     await ctx.reply(
-      "Duh kak, Lala agak ngantuk nih dengerinnya, balesnya agak lambat ya... Mood Lala lagi rendah. Bisa nunggu sekitar 1 jam biar Lala segar lagi, atau kalau lagi urgent, kamu bisa beliin Lala kopi (Rp 5.000) biar Mood-nya langsung penuh lagi.",
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [
-              {
-                text: `Beliin Lala Kopi (Rp ${LALA_COFFEE_PRICE.toLocaleString("id-ID")})`,
-                callback_data: "refill_mood",
-              },
-            ],
-          ],
-        },
-      },
+      `Makasih sudah curhat ke Lala 🌸\n\nSekarang Lala masih dalam tahap persiapan (prelaunch), jadi AI curhatnya belum dibuka dulu ya.\n\nKamu sudah ada di antrian #${queuePosition}. Lala rencananya akan rilis ke publik pada ${releaseDate}. Nanti Lala bakal kabarin kamu lagi begitu udah mendekati rilis, jadi tetap tunggu kabar dari Lala ya. 💌`,
     );
     return;
   }
-  const session = await getSession(ctx.from.id);
-  await ctx.sendChatAction("typing");
 
-  const systemContent = buildCurhatSystemContent(session?.summary);
-  const history = Array.isArray(session?.history) ? session.history : [];
-  const historyMessages = [];
-  for (const entry of history) {
-    const userContent = entry.content != null ? String(entry.content) : "";
-    historyMessages.push({ role: "user", content: userContent });
-    let assistantContent = entry.reply;
-    if (assistantContent == null) {
-      try {
-        const jsonMatch = (entry.response || "").match(/\{[\s\S]*\}/);
-        assistantContent = jsonMatch
-          ? JSON.parse(jsonMatch[0]).reply
-          : entry.response;
-      } catch {
-        assistantContent = entry.response || "";
-      }
+  // --- Beta: only activated users can use AI ---
+  if (isBetaNow() && !isFullLaunch()) {
+    if (!queueActivatedAt) {
+      const posText =
+        queuePosition != null
+          ? `Kamu masih dalam antrian #${queuePosition}.`
+          : "Kamu belum terdaftar di antrian.";
+
+      const body =
+        `${posText}\n\nSaat ini Lala lagi buka akses BETA secara bertahap, sekitar 20 orang per jam, urut dari yang paling duluan daftar.\n\nKamu akan dapat notifikasi begitu giliran kamu dibuka ya. Kalau mau, kamu juga bisa traktir Lala Rp 5.000 untuk langsung bypass antrian.`;
+
+      const replyMarkup = {
+        inline_keyboard: [
+          [
+            {
+              text: "Traktir Lala Rp 5.000 (Bypass Antrian)",
+              callback_data: "beta_bypass",
+            },
+          ],
+        ],
+      };
+
+      await ctx.reply(body, { reply_markup: replyMarkup });
+      return;
     }
-    historyMessages.push({
-      role: "assistant",
-      content: assistantContent != null ? String(assistantContent) : "",
-    });
   }
+
+  // --- Full launch or non-production / activated beta: run normal AI curhat flow ---
+  try {
+    await decrementMood(userId);
+  } catch (err) {
+    console.error("decrementMood error:", err);
+  }
+
+  const historyMessages = Array.isArray(session?.history) ? session.history : [];
+  const systemContent = buildCurhatSystemContent(session?.summary ?? null);
 
   const aiResult = await safeAiCurhat({
     systemContent,
     historyMessages,
-    userText: ctx.message.text,
+    userText: text,
   });
 
-  if (!aiResult.ok) {
-    await ctx.reply(
-      "Aduh, Lala lagi lemot atau kepentok batas waktu. Coba kirim pesannya lagi sebentar ya. 🥺",
-    );
-    return;
-  }
-
-  const rawContent = aiResult.result.choices?.[0]?.message?.content ?? "";
-  const parsed = parseCurhatResponse(rawContent);
-  if (!parsed) {
-    console.error("safeAiCurhat: no JSON found in content", rawContent);
-    await ctx.reply(
-      "Lala agak bingung baca jawaban AI barusan. Coba tulis ulang curhatmu dengan cara lain ya.",
-    );
-    return;
-  }
-
-  const { reply, intent, gender, personality, summary } = parsed;
-  const previousHistory = Array.isArray(session?.history)
-    ? session.history
+  let replyText =
+    "Maaf, Lala lagi agak error waktu baca curhatan kamu. Coba kirim lagi sebentar ya. 🌸";
+  let nextSummary = session?.summary ?? null;
+  let nextPersonality = Array.isArray(session?.personality)
+    ? session.personality
     : [];
-  const newHistory = [
-    ...previousHistory,
-    { content: ctx.message.text, reply },
-  ].slice(-5);
+  let nextGender = session?.gender ?? "unknown";
+
+  if (aiResult.ok && aiResult.result) {
+    const rawContent =
+      aiResult.result?.choices?.[0]?.message?.content ??
+      aiResult.result?.message?.content ??
+      "";
+    const parsed = rawContent ? parseCurhatResponse(String(rawContent)) : null;
+    if (parsed?.reply) replyText = String(parsed.reply);
+    if (Array.isArray(parsed?.personality))
+      nextPersonality = parsed.personality;
+    if (typeof parsed?.summary === "string") nextSummary = parsed.summary;
+    if (typeof parsed?.gender === "string") nextGender = parsed.gender;
+  }
+
+  await ctx.reply(replyText);
+
+  const nextHistory = [
+    ...historyMessages.slice(-8),
+    { role: "user", content: text },
+    { role: "assistant", content: replyText },
+  ];
 
   await upsertSession({
-    user_id: ctx.from.id,
-    updated_at: new Date(),
-    gender,
-    personality,
-    summary,
-    history: newHistory,
-  });
-  await decrementMood(ctx.from.id);
-
-  await ctx.reply(reply, {
-    reply_markup:
-      intent === "matchmaking"
-        ? {
-            inline_keyboard: [
-              [
-                { text: "Cari teman (1:1) 🌸", callback_data: "start_match" },
-                {
-                  text: "Cari teman Grup 👥",
-                  callback_data: "start_group_match",
-                },
-              ],
-            ],
-          }
-        : undefined,
-    parse_mode: "Markdown",
+    user_id: userId,
+    summary: nextSummary,
+    personality: nextPersonality,
+    gender: nextGender,
+    history: nextHistory,
   });
 }
+
+export function registerTextHandler(bot /*, deps */) {
+  bot.on("text", async (ctx) => {
+    const text = ctx.message?.text ?? "";
+    // Let command handlers (/start, /stop, etc.) take precedence.
+    if (text.startsWith("/")) return;
+    await handleCurhat(ctx);
+  });
+}
+

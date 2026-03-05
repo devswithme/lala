@@ -34,6 +34,30 @@ async function isUserInLiveContext(userId) {
 }
 
 export function registerCommands(bot, { sendSafeDM }) {
+  bot.start(async (ctx) => {
+    const userId = ctx.from?.id;
+    const firstName = ctx.from?.first_name ?? "teman";
+    const tallyUrl = `https://tally.so/r/eqB4bk?id=${encodeURIComponent(
+      String(userId ?? ""),
+    )}`;
+
+    await ctx.reply(
+      `Hai ${firstName}! 🌸\n\nSebelum kita sering curhat bareng, boleh kenalan dikit dulu nggak?\n\nIsi form singkat ini ya, biar Lala lebih ngerti kamu:\n${tallyUrl}`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: "Isi form kenalan 🌸",
+                url: tallyUrl,
+              },
+            ],
+          ],
+        },
+      },
+    );
+  });
+
   bot.command("stop", async (ctx) => {
     try {
       const room = await getActiveRoomByUserId(ctx.from.id);
