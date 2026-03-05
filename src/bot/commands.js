@@ -86,13 +86,29 @@ export function registerCommands(bot, { sendSafeDM }) {
         userId: ctx.from.id,
         amount,
       });
-      await ctx.reply("Silakan bayar topup dengan tombol di bawah. Setelah berhasil, saldo kamu akan otomatis masuk.", {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: "💳 Bayar topup sekarang", url: invoiceUrl }],
-          ],
+      // Guard against invalid / missing invoice URLs that could break inline keyboards.
+      if (typeof invoiceUrl !== "string" || !invoiceUrl.trim()) {
+        console.error("topup error: invalid invoiceUrl from Xendit", {
+          userId: ctx.from.id,
+          amount,
+          invoiceUrl,
+        });
+        await ctx.reply(
+          "Maaf, Lala gagal bikin tombol pembayaran topup. Coba lagi sebentar lagi ya.",
+        );
+        return;
+      }
+
+      const replyMarkup = {
+        inline_keyboard: [[{ text: "💳 Bayar topup sekarang", url: invoiceUrl }]],
+      };
+
+      await ctx.reply(
+        "Silakan bayar topup dengan tombol di bawah. Setelah berhasil, saldo kamu akan otomatis masuk.",
+        {
+          reply_markup: replyMarkup,
         },
-      });
+      );
     } catch (err) {
       console.error("topup error:", err);
       await ctx.reply("Gagal bikin invoice topup. Pastikan Xendit sudah dikonfigurasi.");

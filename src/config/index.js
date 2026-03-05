@@ -28,12 +28,23 @@ export const USER_ENTITLEMENTS_TABLE = "user_entitlements";
 export const ROOM_IDENTITY_PERMISSIONS_TABLE = "room_identity_permissions";
 export const GROUP_ROOM_IDENTITY_PERMISSIONS_TABLE =
   "group_room_identity_permissions";
+export const ROOM_REVEAL_CONSENTS_TABLE = "room_reveal_consents";
 export const GIFT_EVENTS_TABLE = "gift_events";
 export const GIFT_CLAIMS_TABLE = "gift_claims";
 
 // Timing
 export const SILENCE_ICEBREAK_MS = 3 * 60 * 1000;
 export const AI_CURHAT_TIMEOUT_MS = 25_000;
+
+// Mood Energy
+export const MOOD_DECREMENT_PER_CHAT = 1;
+export const MOOD_LOW_THRESHOLD = 10;
+export const MOOD_RECOVERY_PER_HOUR = 100;
+export const LALA_COFFEE_PRICE = 5000;
+
+// Chemistry (unlock identity via chat count + mutual consent)
+export const CHEMISTRY_THRESHOLD = 50;
+export const CHEMISTRY_HINT_AT = 25;
 
 // Prices (IDR)
 export const IDENTITY_UNLOCK_PRICE = 6000;

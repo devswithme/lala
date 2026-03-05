@@ -17,8 +17,11 @@ import {
   USER_ENTITLEMENTS_TABLE,
   ROOM_IDENTITY_PERMISSIONS_TABLE,
   GROUP_ROOM_IDENTITY_PERMISSIONS_TABLE,
+  ROOM_REVEAL_CONSENTS_TABLE,
   GIFT_EVENTS_TABLE,
   GIFT_CLAIMS_TABLE,
+  MOOD_DECREMENT_PER_CHAT,
+  MOOD_RECOVERY_PER_HOUR,
 } from "../config/index.js";
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -31,6 +34,16 @@ export async function getActiveRoomByUserId(userId) {
     .eq("status", "active")
     .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
     .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data ?? null;
+}
+
+export async function getRoomById(roomId) {
+  const { data, error } = await supabase
+    .from(ROOMS_TABLE)
+    .select("*")
+    .eq("id", roomId)
     .maybeSingle();
   if (error) throw error;
   return data ?? null;
@@ -93,6 +106,17 @@ export async function insertRoomMessage(roomId, userId, content, table = ROOM_ME
   if (error) throw error;
 }
 
+/** Count messages in room from real users (user_id != 0). */
+export async function getRoomMessageCount(roomId, table = ROOM_MESSAGES_TABLE) {
+  const { count, error } = await supabase
+    .from(table)
+    .select("id", { count: "exact", head: true })
+    .eq("room_id", roomId)
+    .neq("user_id", 0);
+  if (error) throw error;
+  return count ?? 0;
+}
+
 // --- Sessions ---
 export async function getSession(userId, columns = "summary,history") {
   const { data, error } = await supabase
@@ -106,6 +130,43 @@ export async function getSession(userId, columns = "summary,history") {
 
 export async function upsertSession(record) {
   const { error } = await supabase.from(SESSIONS_TABLE).upsert(record);
+  if (error) throw error;
+}
+
+// --- Mood Energy ---
+export async function getMood(userId) {
+  const { data, error } = await supabase
+    .from(SESSIONS_TABLE)
+    .select("mood,mood_updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  const stored = data?.mood ?? 100;
+  const updatedAt = data?.mood_updated_at ?? new Date();
+  const now = Date.now();
+  const hoursSince = (now - new Date(updatedAt).getTime()) / 3600000;
+  const recovered = Math.min(100, (stored ?? 100) + MOOD_RECOVERY_PER_HOUR * hoursSince);
+  return Math.round(Math.max(0, Math.min(100, recovered)));
+}
+
+export async function decrementMood(userId) {
+  const current = await getMood(userId);
+  const next = Math.max(0, current - MOOD_DECREMENT_PER_CHAT);
+  const { error } = await supabase
+    .from(SESSIONS_TABLE)
+    .update({ mood: next, mood_updated_at: new Date() })
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function refillMood(userId) {
+  const { error } = await supabase
+    .from(SESSIONS_TABLE)
+    .upsert({
+      user_id: userId,
+      mood: 100,
+      mood_updated_at: new Date(),
+    });
   if (error) throw error;
 }
 
@@ -305,6 +366,36 @@ export async function upsertGroupIdentityPermission(roomId, userId) {
     created_at: new Date(),
   });
   if (error) throw error;
+}
+
+// --- Reveal consent (mutual Kenalan) ---
+export async function addRevealConsent(roomId, userId) {
+  const { error } = await supabase.from(ROOM_REVEAL_CONSENTS_TABLE).upsert({
+    room_id: roomId,
+    user_id: userId,
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function getRevealConsents(roomId) {
+  const { data, error } = await supabase
+    .from(ROOM_REVEAL_CONSENTS_TABLE)
+    .select("user_id")
+    .eq("room_id", roomId);
+  if (error) throw error;
+  return (data ?? []).map((r) => r.user_id);
+}
+
+export async function hasRevealConsent(roomId, userId) {
+  const { data, error } = await supabase
+    .from(ROOM_REVEAL_CONSENTS_TABLE)
+    .select("user_id")
+    .eq("room_id", roomId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return !!data;
 }
 
 // --- Entitlements ---

@@ -32,7 +32,7 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
-    if (req.method === "POST" && url.href.includes("xendit-webhook")) {
+    if (req.method === "POST" && url.pathname === "/api/xendit") {
       try {
         const body = await req.json().catch(() => ({}));
         const { statusCode, body: resBody } = await handleXenditWebhook(body);

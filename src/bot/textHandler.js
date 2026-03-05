@@ -1,15 +1,25 @@
-import { getActiveRoomByUserId, getActiveGroupRoomByUserId, otherUserId } from "../db/index.js";
+import {
+  getActiveRoomByUserId,
+  getActiveGroupRoomByUserId,
+  otherUserId,
+} from "../db/index.js";
 import {
   getLastRoomMessageAt,
   getRecentRoomMessages,
   insertRoomMessage,
+  getRoomMessageCount,
   getGroupRoomMemberIds,
   getSession,
   upsertSession,
+  getMood,
+  decrementMood,
   ensureIdentityPermission,
   ensureGroupIdentityPermission,
 } from "../db/index.js";
-import { ROOM_MESSAGES_TABLE, GROUP_ROOM_MESSAGES_TABLE } from "../config/index.js";
+import {
+  ROOM_MESSAGES_TABLE,
+  GROUP_ROOM_MESSAGES_TABLE,
+} from "../config/index.js";
 import { censorText, looksUnsafe, looksLikeIdentity } from "../lib/content.js";
 import { moderatorDecision } from "../ai/moderator.js";
 import {
@@ -17,7 +27,14 @@ import {
   buildCurhatSystemContent,
   parseCurhatResponse,
 } from "../ai/curhat.js";
-import { SILENCE_ICEBREAK_MS, IDENTITY_UNLOCK_PRICE } from "../config/index.js";
+import {
+  SILENCE_ICEBREAK_MS,
+  IDENTITY_UNLOCK_PRICE,
+  CHEMISTRY_THRESHOLD,
+  CHEMISTRY_HINT_AT,
+  MOOD_LOW_THRESHOLD,
+  LALA_COFFEE_PRICE,
+} from "../config/index.js";
 
 export function registerTextHandler(bot, { sendSafeDM }) {
   bot.on("text", async (ctx) => {
@@ -37,7 +54,9 @@ export function registerTextHandler(bot, { sendSafeDM }) {
       await handleCurhat(ctx, sendSafeDM);
     } catch (error) {
       console.error("Gemini Error:", error);
-      await ctx.reply("Aduh, Lala lagi agak pusing.. Sapa aku lagi ya nanti? 🥺");
+      await ctx.reply(
+        "Aduh, Lala lagi agak pusing.. Sapa aku lagi ya nanti? 🥺",
+      );
     }
   });
 }
@@ -51,22 +70,47 @@ async function handleOneToOneRoom(ctx, activeRoom, sendSafeDM) {
   if (identity.detected) {
     const allowed = await ensureIdentityPermission(activeRoom.id, fromId);
     if (!allowed) {
-      await ctx.reply(
-        "Demi keamanan, Lala tidak mengizinkan tukar identitas (nomor/IG/username/email) di chat gratis.\n\nKalau kamu mau unlock, bayar sekali Rp 6.000 untuk room ini.",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [
-                {
-                  text: `Unlock Identitas (Rp ${IDENTITY_UNLOCK_PRICE.toLocaleString("id-ID")})`,
-                  callback_data: `unlock_identity:${activeRoom.id}`,
-                },
-              ],
-            ],
-          },
-        },
+      const count = await getRoomMessageCount(
+        activeRoom.id,
+        ROOM_MESSAGES_TABLE,
       );
-      await sendSafeDM(toId, "[Pesan berisi identitas pribadi dan tidak dikirim.]");
+      if (count >= CHEMISTRY_THRESHOLD) {
+        await ctx.reply(
+          "Identitas baru bisa dibuka kalau kalian berdua setuju. Klik tombol Kenalan ya – kalau kalian berdua sama-sama klik, Lala buka akses.",
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: "Kenalan",
+                    callback_data: `kenalan:${activeRoom.id}`,
+                  },
+                ],
+              ],
+            },
+          },
+        );
+      } else {
+        await ctx.reply(
+          "Demi keamanan, Lala tidak mengizinkan tukar identitas (nama/nomor/IG/username/email) di chat gratis.\n\nKalau kamu mau unlock, bayar sekali Rp 6.000 untuk room ini.",
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  {
+                    text: `Unlock Identitas (Rp ${IDENTITY_UNLOCK_PRICE.toLocaleString("id-ID")})`,
+                    callback_data: `unlock_identity:${activeRoom.id}`,
+                  },
+                ],
+              ],
+            },
+          },
+        );
+      }
+      await sendSafeDM(
+        toId,
+        "[Pesan berisi identitas pribadi dan tidak dikirim.]",
+      );
       return;
     }
   }
@@ -74,16 +118,55 @@ async function handleOneToOneRoom(ctx, activeRoom, sendSafeDM) {
   const lastAt = await getLastRoomMessageAt(activeRoom.id, ROOM_MESSAGES_TABLE);
   const silenceMs = lastAt ? Date.now() - new Date(lastAt).getTime() : 0;
   const unsafe = looksUnsafe(original);
-  const relayedText = unsafe ? "[Pesan disensor oleh Lala]" : censorText(original);
+  const relayedText = unsafe
+    ? "[Pesan disensor oleh Lala]"
+    : censorText(original);
 
   await insertRoomMessage(activeRoom.id, fromId, original, ROOM_MESSAGES_TABLE);
-  await sendSafeDM(toId, `${ctx.from.first_name ?? "Teman"}: ${relayedText}`);
+  await sendSafeDM(toId, relayedText);
 
-  const recent = await getRecentRoomMessages(activeRoom.id, 10, ROOM_MESSAGES_TABLE);
+  const count = await getRoomMessageCount(activeRoom.id, ROOM_MESSAGES_TABLE);
+  if (count === CHEMISTRY_HINT_AT) {
+    await sendSafeDM(
+      fromId,
+      `Chemistry: ${count}/${CHEMISTRY_THRESHOLD} – setengah jalan!`,
+    );
+    await sendSafeDM(
+      toId,
+      `Chemistry: ${count}/${CHEMISTRY_THRESHOLD} – setengah jalan!`,
+    );
+  } else if (count === CHEMISTRY_THRESHOLD) {
+    const announcement =
+      "Ciee, kalian berdua kayaknya nyambung banget nih! Lala udah buka akses buat kalian saling liat profil ya. Silakan klik tombol Kenalan kalau kalian berdua sama-sama setuju!";
+    await sendSafeDM(fromId, announcement, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Kenalan", callback_data: `kenalan:${activeRoom.id}` }],
+        ],
+      },
+    });
+    await sendSafeDM(toId, announcement, {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Kenalan", callback_data: `kenalan:${activeRoom.id}` }],
+        ],
+      },
+    });
+  }
+
+  const recent = await getRecentRoomMessages(
+    activeRoom.id,
+    10,
+    ROOM_MESSAGES_TABLE,
+  );
   const lines = recent
     .map((m) => {
       const who =
-        m.user_id === fromId ? "UserA" : m.user_id === toId ? "UserB" : "System";
+        m.user_id === fromId
+          ? "UserA"
+          : m.user_id === toId
+            ? "UserB"
+            : "System";
       return `${who}: ${m.content}`;
     })
     .join("\n");
@@ -128,7 +211,7 @@ async function handleGroupRoom(ctx, activeGroupRoom, sendSafeDM) {
     );
     if (!allowed) {
       await ctx.reply(
-        "Demi keamanan, Lala menahan pesan yang berisi identitas (nomor/IG/username/email).\n\nKalau kamu mau unlock identitas di grup ini, bayar sekali Rp 6.000.",
+        "Demi keamanan, Lala menahan pesan yang berisi identitas (nama/nomor/IG/username/email).\n\nKalau kamu mau unlock identitas di grup ini, bayar sekali Rp 6.000.",
         {
           reply_markup: {
             inline_keyboard: [
@@ -143,13 +226,18 @@ async function handleGroupRoom(ctx, activeGroupRoom, sendSafeDM) {
         },
       );
       for (const id of otherIds) {
-        await sendSafeDM(id, "[Pesan berisi identitas pribadi dan tidak dikirim.]");
+        await sendSafeDM(
+          id,
+          "[Pesan berisi identitas pribadi dan tidak dikirim.]",
+        );
       }
       return;
     }
   }
 
-  const relayedText = unsafe ? "[Pesan disensor oleh Lala]" : censorText(original);
+  const relayedText = unsafe
+    ? "[Pesan disensor oleh Lala]"
+    : censorText(original);
   await insertRoomMessage(
     activeGroupRoom.id,
     fromId,
@@ -157,7 +245,7 @@ async function handleGroupRoom(ctx, activeGroupRoom, sendSafeDM) {
     GROUP_ROOM_MESSAGES_TABLE,
   );
   for (const id of otherIds) {
-    await sendSafeDM(id, `${ctx.from.first_name ?? "Teman"}: ${relayedText}`);
+    await sendSafeDM(id, relayedText);
   }
 
   const recent = await getRecentRoomMessages(
@@ -195,6 +283,25 @@ async function handleGroupRoom(ctx, activeGroupRoom, sendSafeDM) {
 }
 
 async function handleCurhat(ctx, sendSafeDM) {
+  const mood = await getMood(ctx.from.id);
+  if (mood < MOOD_LOW_THRESHOLD) {
+    await ctx.reply(
+      "Duh kak, Lala agak ngantuk nih dengerinnya, balesnya agak lambat ya... Mood Lala lagi rendah. Bisa nunggu sekitar 1 jam biar Lala segar lagi, atau kalau lagi urgent, kamu bisa beliin Lala kopi (Rp 5.000) biar Mood-nya langsung penuh lagi.",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: `Beliin Lala Kopi (Rp ${LALA_COFFEE_PRICE.toLocaleString("id-ID")})`,
+                callback_data: "refill_mood",
+              },
+            ],
+          ],
+        },
+      },
+    );
+    return;
+  }
   const session = await getSession(ctx.from.id);
   await ctx.sendChatAction("typing");
 
@@ -245,8 +352,13 @@ async function handleCurhat(ctx, sendSafeDM) {
   }
 
   const { reply, intent, gender, personality, summary } = parsed;
-  const previousHistory = Array.isArray(session?.history) ? session.history : [];
-  const newHistory = [...previousHistory, { content: ctx.message.text, reply }].slice(-5);
+  const previousHistory = Array.isArray(session?.history)
+    ? session.history
+    : [];
+  const newHistory = [
+    ...previousHistory,
+    { content: ctx.message.text, reply },
+  ].slice(-5);
 
   await upsertSession({
     user_id: ctx.from.id,
@@ -256,6 +368,7 @@ async function handleCurhat(ctx, sendSafeDM) {
     summary,
     history: newHistory,
   });
+  await decrementMood(ctx.from.id);
 
   await ctx.reply(reply, {
     reply_markup:
@@ -264,7 +377,10 @@ async function handleCurhat(ctx, sendSafeDM) {
             inline_keyboard: [
               [
                 { text: "Cari teman (1:1) 🌸", callback_data: "start_match" },
-                { text: "Cari teman Grup 👥", callback_data: "start_group_match" },
+                {
+                  text: "Cari teman Grup 👥",
+                  callback_data: "start_group_match",
+                },
               ],
             ],
           }

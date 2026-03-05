@@ -1,6 +1,8 @@
 import {
   getActiveRoomByUserId,
   getActiveGroupRoomByUserId,
+  getRoomById,
+  otherUserId,
   getSearchingSessions,
   getSearchingGroupSessions,
   getSessionCandidatesWithPersonality,
@@ -20,25 +22,46 @@ import {
   ensureGroupIdentityPermission,
   upsertRoomIdentityPermission,
   upsertGroupIdentityPermission,
-  getUserEntitlements,
-  upsertGroupPass,
+  addRevealConsent,
+  getRevealConsents,
   walletDeduct,
   walletAdd,
   getGiftEvent,
   insertGiftClaim,
   decrementGiftEventRemaining,
+  refillMood,
 } from "../db/index.js";
 import {
   ROOM_MESSAGES_TABLE,
   GROUP_ROOM_MESSAGES_TABLE,
   IDENTITY_UNLOCK_PRICE,
-  GROUP_PASS_PRICE,
+  LALA_COFFEE_PRICE,
   GIFTS,
 } from "../config/index.js";
 import { overlapTags } from "../lib/matchmaking.js";
 import { makeBottleText } from "../ai/bottle.js";
 
 export function registerActions(bot, { sendSafeDM }) {
+  bot.action("refill_mood", async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+      const { ok, balance } = await walletDeduct(ctx.from.id, LALA_COFFEE_PRICE);
+      if (!ok) {
+        await ctx.reply(
+          `Saldo kamu kurang. Saldo: Rp ${balance.toLocaleString("id-ID")}.\nTopup dulu pakai /topup 10000`,
+        );
+        return;
+      }
+      await refillMood(ctx.from.id);
+      await ctx.reply(
+        "Makasih kopinya! Lala segar lagi, Mood 100%. Curhat lagi ya kalau perlu.",
+      );
+    } catch (err) {
+      console.error("refill_mood error:", err);
+      await ctx.reply("Gagal beliin kopi. Coba lagi ya.");
+    }
+  });
+
   bot.action(/^claim_gift:(.+)$/, async (ctx) => {
     try {
       await ctx.answerCbQuery();
@@ -74,6 +97,62 @@ export function registerActions(bot, { sendSafeDM }) {
     } catch (err) {
       console.error("claim_gift error:", err);
       await ctx.reply("Gagal klaim gift. Coba lagi ya.");
+    }
+  });
+
+  bot.action(/^kenalan:(.+)$/, async (ctx) => {
+    try {
+      await ctx.answerCbQuery();
+      const roomId = String(ctx.match[1]).trim();
+      const room = await getRoomById(Number(roomId));
+      if (!room || room.status !== "active") {
+        await ctx.reply("Room tidak ditemukan atau sudah berakhir.");
+        return;
+      }
+      const fromId = ctx.from.id;
+      const u1 = room.user1_id;
+      const u2 = room.user2_id;
+      if (fromId !== u1 && fromId !== u2) {
+        await ctx.reply("Kamu tidak ada di room ini.");
+        return;
+      }
+      const allowed = await ensureIdentityPermission(room.id, fromId);
+      if (allowed) {
+        await ctx.reply("Kamu sudah boleh share identitas di room ini.");
+        return;
+      }
+      await addRevealConsent(room.id, fromId);
+      const consents = await getRevealConsents(room.id);
+      const memberIds = [u1, u2].filter(Boolean);
+      const bothConsented = memberIds.every((id) => consents.includes(id));
+      if (bothConsented) {
+        await upsertRoomIdentityPermission(room.id, u1);
+        await upsertRoomIdentityPermission(room.id, u2);
+        const msg =
+          "Kalian berdua sudah saling setuju. Sekarang kalian boleh saling kenalan dan share identitas di chat ini.";
+        await ctx.reply(msg);
+        const otherId = otherUserId(room, fromId);
+        await sendSafeDM(otherId, msg);
+        try {
+          const chatA = await bot.telegram.getChat(u1);
+          const chatB = await bot.telegram.getChat(u2);
+          const nameA = [chatA.first_name, chatA.last_name].filter(Boolean).join(" ") || "Teman";
+          const nameB = [chatB.first_name, chatB.last_name].filter(Boolean).join(" ") || "Teman";
+          const usernameA = chatA.username ? `@${chatA.username}` : "";
+          const usernameB = chatB.username ? `@${chatB.username}` : "";
+          await sendSafeDM(u2, `Profil teman ngobrolmu: ${nameA} ${usernameA}`.trim());
+          await sendSafeDM(u1, `Profil teman ngobrolmu: ${nameB} ${usernameB}`.trim());
+        } catch (profileErr) {
+          console.error("kenalan getChat profile error:", profileErr);
+        }
+      } else {
+        await ctx.reply(
+          "Kamu sudah klik Kenalan. Tunggu teman ngobrolmu juga klik ya – identitas baru terbuka kalau kalian berdua setuju.",
+        );
+      }
+    } catch (err) {
+      console.error("kenalan error:", err);
+      await ctx.reply("Gagal menyimpan. Coba lagi ya.");
     }
   });
 
@@ -247,19 +326,6 @@ export function registerActions(bot, { sendSafeDM }) {
       if (oneToOne || groupRoom) {
         await ctx.reply("Kamu masih dalam obrolan. Ketik /stop dulu ya.");
         return;
-      }
-      const ent = await getUserEntitlements(ctx.from.id);
-      const hasPass = !!ent?.has_group_pass;
-      if (!hasPass) {
-        const { ok, balance } = await walletDeduct(ctx.from.id, GROUP_PASS_PRICE);
-        if (!ok) {
-          await ctx.reply(
-            `Untuk masuk live grup perlu bayar Rp ${GROUP_PASS_PRICE.toLocaleString("id-ID")}.\nSaldo kamu: Rp ${balance.toLocaleString("id-ID")}\nTopup dulu pakai /topup 10000`,
-          );
-          return;
-        }
-        await upsertGroupPass(ctx.from.id);
-        await ctx.reply("✅ Berhasil! Kamu sekarang bisa join live grup.");
       }
       const me = await getSession(ctx.from.id, "personality,summary,status");
       const myTags = Array.isArray(me?.personality) ? me.personality : [];

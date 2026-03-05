@@ -24,6 +24,20 @@ export function looksUnsafe(text) {
   );
 }
 
+// Phrases that mean "stating my name" / reveal identity by name
+const NAME_REVEAL_PATTERNS = [
+  /\b(nama\s+saya|namaku|namanya\s+saya)\b/i,
+  /\bperkenalkan\s+(saya|namaku|nama\s+saya)?/i,
+  /\b(panggil\s+(aku|saya|gue)|call\s+me)\b/i,
+  /\b(my\s+name\s+is|i'?m\s+\w+|i\s+am\s+\w+)\b/i,
+];
+
+function looksLikeNameReveal(text) {
+  const s = String(text ?? "").trim();
+  if (s.length > 120) return false;
+  return NAME_REVEAL_PATTERNS.some((p) => p.test(s));
+}
+
 export function looksLikeIdentity(text) {
   const s = String(text ?? "");
   const lower = s.toLowerCase();
@@ -33,10 +47,19 @@ export function looksLikeIdentity(text) {
   const tme = /t\.me\/\w+/i.test(s);
   const keywords =
     /\b(wa|whatsapp|ig|instagram|line|telegram|dm|no hp|nomor|kontak)\b/i.test(s);
-  const detected = phone || email || socialAt || tme || keywords;
+  const nameReveal = looksLikeNameReveal(s);
+  const detected = phone || email || socialAt || tme || keywords || nameReveal;
   if (!detected) return { detected: false, kind: null };
   return {
     detected: true,
-    kind: phone ? "phone" : email ? "email" : socialAt || tme ? "social" : "generic",
+    kind: nameReveal
+      ? "name"
+      : phone
+        ? "phone"
+        : email
+          ? "email"
+          : socialAt || tme
+            ? "social"
+            : "generic",
   };
 }

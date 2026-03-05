@@ -14,18 +14,34 @@ export const xendit = XENDIT_API_KEY
 
 export async function createTopupInvoice({ userId, amount }) {
   if (!xendit) throw new Error("XENDIT_API_KEY not configured");
-  const externalId = `topup:${userId}:${Date.now()}`;
+  const externalId = `lala:${userId}:${Date.now()}`;
   const { Invoice } = xendit;
-  const invoice = await Invoice.createInvoice({
-    data: {
-      externalId,
-      amount,
-      description: `Top up saldo Lala (user ${userId})`,
-      successRedirectUrl: "https://t.me/talktolala_bot",
-      failureRedirectUrl: "https://t.me/talktolala_bot",
-      currency: "IDR",
-    },
-  });
+
+  let invoice = null;
+
+  const data = {
+    externalId,
+    amount,
+    successRedirectUrl: "https://t.me/talktolala_bot",
+    failureRedirectUrl: "https://t.me/talktolala_bot",
+    description: `Top up saldo Lala (user ${userId})`,
+  };
+
+  if (process.env.NODE_ENV !== "production") {
+    invoice = await Invoice.createInvoice({
+      data,
+    });
+  } else {
+    const data = await fetch(`https://prox.fysite.id/invoice`, {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Api-Key": process.env.XENDIT_PROXY_API_KEY,
+      },
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    invoice = await data.json();
+  }
 
   await insertPayment({
     user_id: userId,
@@ -36,7 +52,10 @@ export async function createTopupInvoice({ userId, amount }) {
     status: "pending",
   });
 
-  return { invoiceUrl: invoice.invoiceUrl, invoiceId: invoice.id };
+  return {
+    invoiceUrl: invoice.invoiceUrl ?? invoice.invoice_url,
+    invoiceId: invoice.id,
+  };
 }
 
 /**
@@ -46,7 +65,6 @@ export async function handleXenditWebhook(body) {
   const invoiceId = body.id;
   const status = (body.status || "").toLowerCase();
 
-  console.log(body);
   if (!invoiceId) {
     return { statusCode: 400, body: "missing invoice id" };
   }

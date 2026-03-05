@@ -41,7 +41,9 @@ export function launchBotLocal(bot) {
   return bot
     .launch()
     .then(() =>
-      console.log("🌸 Lala is Online (Local Mode)! Kirim pesan di Telegram sekarang..."),
+      console.log(
+        "🌸 Lala is Online (Local Mode)! Kirim pesan di Telegram sekarang...",
+      ),
     )
     .catch((err) => console.error("Gagal nyala:", err));
 }
