@@ -22,6 +22,12 @@ Struktur JSON:
 }
 `;
 
+/** OpenRouter only accepts these roles; history may have other values from DB. */
+function normalizeRole(role) {
+  const r = typeof role === "string" ? role.toLowerCase() : "";
+  return r === "user" ? "user" : "assistant";
+}
+
 /**
  * Call AI for curhat with timeout. Returns { ok: true, result } or { ok: false, error }.
  */
@@ -33,8 +39,8 @@ export async function safeAiCurhat({ systemContent, historyMessages, userText })
       content: systemContent != null ? String(systemContent) : "",
     },
     ...historyMessages.map((m) => ({
-      role: m.role,
-      content: m.content != null ? String(m.content) : "",
+      role: normalizeRole(m?.role),
+      content: m?.content != null ? String(m.content) : "",
     })),
     { role: "user", content: userText != null ? String(userText) : "" },
   ];

@@ -10,7 +10,7 @@ import {
   markQueueActivated,
 } from "../src/db/index.js";
 
-const bot = createBot();
+export const bot = createBot();
 
 const DEFAULT_BETA_BATCH_SIZE = 20;
 const DEFAULT_BETA_INTERVAL_MS = 3 * 60 * 1000;
@@ -47,7 +47,6 @@ async function maybeRunBetaScheduler() {
 
 export default async function handler(req, res) {
   try {
-    // Lazy-triggered beta queue activation.
     await maybeRunBetaScheduler();
 
     if (req.method === "POST") {

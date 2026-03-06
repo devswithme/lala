@@ -3,8 +3,9 @@
  * Entry for Docker and local run (bun run src/server.js).
  */
 import "dotenv/config";
-import { PORT } from "./config/index.js";
-import mainHandler from "../api/index.js";
+import { PORT, isProduction } from "./config/index.js";
+import mainHandler, { bot } from "../api/index.js";
+import { launchBotLocal } from "./bot/index.js";
 import tallyHandler from "../api/tally.js";
 import xenditHandler from "../api/xendit.js";
 
@@ -40,8 +41,9 @@ function makeRes() {
 }
 
 export default function serve() {
+  const port = Number(PORT) || 3000;
   return Bun.serve({
-    port: Number(PORT) || 3000,
+    port,
     async fetch(req) {
       const url = new URL(req.url);
       const path = url.pathname;
@@ -80,4 +82,12 @@ export default function serve() {
   });
 }
 
-serve();
+const server = serve();
+
+// In development, Telegram can't reach localhost — use long polling so the bot receives updates
+if (!isProduction) {
+  bot.telegram
+    .deleteWebhook({ drop_pending_updates: true })
+    .then(() => launchBotLocal(bot))
+    .catch((err) => console.error("Dev polling start error:", err));
+}
