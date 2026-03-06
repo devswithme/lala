@@ -18,7 +18,25 @@ const telegram = new Telegraf(BOT_TOKEN).telegram;
 
 function getUserIdFromBody(body) {
   const hidden = body?.data?.hiddenFields ?? {};
-  const raw = hidden.id ?? hidden.user_id ?? hidden.userId;
+  let raw = hidden.id ?? hidden.user_id ?? hidden.userId;
+  if (raw == null && Array.isArray(body?.data?.fields)) {
+    const idField = body.data.fields.find(
+      (f) =>
+        f.key === "id" ||
+        f.key === "user_id" ||
+        f.key === "userId" ||
+        f.id === "id" ||
+        f.title === "id" ||
+        f.type === "HIDDEN_FIELDS"
+    );
+    const answer = idField?.answer;
+    raw =
+      idField?.value ??
+      (typeof answer === "object" && answer !== null
+        ? answer.value ?? answer.raw ?? answer.id ?? answer.user_id
+        : answer) ??
+      idField?.answer;
+  }
   const num = Number(raw);
   return Number.isFinite(num) && num > 0 ? num : null;
 }

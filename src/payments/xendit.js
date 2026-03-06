@@ -22,8 +22,8 @@ export async function createTopupInvoice({ userId, amount }) {
   const data = {
     externalId,
     amount,
-    successRedirectUrl: "https://t.me/talktolala_bot",
-    failureRedirectUrl: "https://t.me/talktolala_bot",
+    successRedirectUrl: "https://web.telegram.org/k/#@talktolala_bot",
+    failureRedirectUrl: "https://web.telegram.org/k/#@talktolala_bot",
     description: `Top up saldo Lala (user ${userId})`,
   };
 
