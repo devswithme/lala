@@ -65,6 +65,7 @@ export const GROUP_ROOM_IDENTITY_PERMISSIONS_TABLE =
 export const ROOM_REVEAL_CONSENTS_TABLE = "room_reveal_consents";
 export const GIFT_EVENTS_TABLE = "gift_events";
 export const GIFT_CLAIMS_TABLE = "gift_claims";
+export const PROCESSED_TALLY_SUBMISSIONS_TABLE = "processed_tally_submissions";
 
 // Timing
 export const SILENCE_ICEBREAK_MS = 3 * 60 * 1000;

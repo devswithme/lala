@@ -10,8 +10,10 @@ import {
   PRELAUNCH_END,
 } from "../src/config/index.js";
 import {
+  getSession,
   upsertSession,
   assignQueuePositionForUser,
+  tryMarkTallySubmissionProcessed,
 } from "../src/db/index.js";
 
 const telegram = new Telegraf(BOT_TOKEN).telegram;
@@ -79,12 +81,20 @@ export default async function handler(req, res) {
     }
 
     const body = req.body ?? {};
+    const submissionId = body?.data?.responseId ?? body?.data?.submissionId ?? null;
+    if (submissionId && !(await tryMarkTallySubmissionProcessed(submissionId))) {
+      res.status(200).send("OK");
+      return;
+    }
+
     const userId = getUserIdFromBody(body);
     if (!userId) {
       console.error("Tally webhook missing user id", body);
       res.status(400).send("Missing user id");
       return;
     }
+
+    const alreadyInQueue = (await getSession(userId, "queue_position"))?.queue_position != null;
 
     const fields = body?.data?.fields ?? body?.data?.answers ?? [];
     const genderRaw = getFieldValue(fields, ["gender", "jenis_kelamin"]);
@@ -105,7 +115,8 @@ export default async function handler(req, res) {
     };
     await upsertSession(sessionPayload);
 
-    if (isProduction) {
+    const isFirstTime = !alreadyInQueue;
+    if (isProduction && isFirstTime) {
       const releaseDate = PRELAUNCH_END.toLocaleDateString("id-ID", {
         year: "numeric",
         month: "long",

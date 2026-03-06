@@ -20,6 +20,7 @@ import {
   ROOM_REVEAL_CONSENTS_TABLE,
   GIFT_EVENTS_TABLE,
   GIFT_CLAIMS_TABLE,
+  PROCESSED_TALLY_SUBMISSIONS_TABLE,
   MOOD_DECREMENT_PER_CHAT,
   MOOD_RECOVERY_PER_HOUR,
 } from "../config/index.js";
@@ -195,6 +196,19 @@ export async function markQueueBypassed(userId) {
     .update({ queue_bypassed: true, queue_activated_at: new Date() })
     .eq("user_id", userId);
   if (error) throw error;
+}
+
+/** Returns true if this submission was new (we inserted it), false if already processed (duplicate). */
+export async function tryMarkTallySubmissionProcessed(submissionId) {
+  if (!submissionId || typeof submissionId !== "string") return false;
+  const { error } = await supabase
+    .from(PROCESSED_TALLY_SUBMISSIONS_TABLE)
+    .insert({ submission_id: submissionId });
+  if (error) {
+    if (error.code === "23505") return false; // unique violation = already processed
+    throw error;
+  }
+  return true;
 }
 
 // --- Mood Energy ---
