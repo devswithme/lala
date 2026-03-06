@@ -12,6 +12,8 @@ export const XENDIT_API_KEY = env.XENDIT_API_KEY ?? "";
 export const NODE_ENV = env.NODE_ENV ?? "development";
 export const PORT = Number(env.PORT) || 3000;
 export const TALLY_SIGNING_SECRET = env.TALLY_SIGNING_SECRET ?? "";
+/** Public URL for Telegram webhook (e.g. https://your-domain.com/api). If set in production, webhook is used; otherwise polling. */
+export const WEBHOOK_BASE_URL = env.WEBHOOK_BASE_URL ?? "";
 
 export const isProduction = NODE_ENV === "production";
 

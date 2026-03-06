@@ -3,7 +3,7 @@
  * Entry for Docker and local run (bun run src/server.js).
  */
 import "dotenv/config";
-import { PORT, isProduction } from "./config/index.js";
+import { PORT, isProduction, WEBHOOK_BASE_URL } from "./config/index.js";
 import mainHandler, { bot } from "../api/index.js";
 import { launchBotLocal } from "./bot/index.js";
 import tallyHandler from "../api/tally.js";
@@ -82,12 +82,26 @@ export default function serve() {
   });
 }
 
-const server = serve();
+serve();
 
-// In development, Telegram can't reach localhost — use long polling so the bot receives updates
+// How the bot receives updates:
+// - Development: always use long polling (Telegram can't reach localhost).
+// - Production + WEBHOOK_BASE_URL set: set webhook so Telegram POSTs to this server.
+// - Production + no WEBHOOK_BASE_URL: use long polling so the bot still responds.
 if (!isProduction) {
   bot.telegram
     .deleteWebhook({ drop_pending_updates: true })
     .then(() => launchBotLocal(bot))
     .catch((err) => console.error("Dev polling start error:", err));
+} else if (WEBHOOK_BASE_URL) {
+  bot.telegram
+    .setWebhook(WEBHOOK_BASE_URL)
+    .then(() => console.log("🌸 Webhook set to", WEBHOOK_BASE_URL))
+    .catch((err) => console.error("Webhook set error:", err));
+} else {
+  bot.telegram
+    .deleteWebhook({ drop_pending_updates: true })
+    .then(() => launchBotLocal(bot))
+    .then(() => console.log("🌸 Production: using long polling (set WEBHOOK_BASE_URL for webhook mode)."))
+    .catch((err) => console.error("Production polling start error:", err));
 }
