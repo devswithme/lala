@@ -13,7 +13,7 @@ RUN bun install --frozen-lockfile --production --verbose
 COPY . .
 
 # RUN bun build
-RUN bun build --compile --minify --sourcemap ./src --outfile hono-docker-app
+RUN bun build --compile --minify --sourcemap ./src/server.js --outfile lala-app
 
 # Our application runner
 FROM gcr.io/distroless/base-debian12:nonroot AS runner
@@ -21,12 +21,12 @@ FROM gcr.io/distroless/base-debian12:nonroot AS runner
 ENV NODE_ENV=production
 
 ARG BUILD_APP_PORT=3002
-ENV APP_PORT=${BUILD_APP_PORT}
+ENV PORT=${BUILD_APP_PORT}
 EXPOSE ${APP_PORT}
 
 WORKDIR /app
 
 # Copy the compiled executable from the build stage
-COPY --from=build /app/hono-docker-app .
+COPY --from=build /app/lala-app .
 
-ENTRYPOINT ["./hono-docker-app"]
+ENTRYPOINT ["./lala-app"]
