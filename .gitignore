@@ -1,0 +1,29 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node / Bun
+node_modules/
+bun.lock
+
+# Prisma generated
+node_modules/.prisma/
+
+# Build output
+dist/
+build/
+*.js.map
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp

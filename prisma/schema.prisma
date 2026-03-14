@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String   @id
+  name           String?
+  gender         String?
+  occupation     String?
+  concerns       String[]
+  tallyDone      Boolean  @default(false)
+  tallySubId     String?  @unique
+  history        Json     @default("[]")
+  historySummary String?
+  aiCount        Int      @default(0)
+  aiResetAt      DateTime @default(now())
+  balance        Int      @default(0)
+  status         Status   @default(IDLE)
+  roomId         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments Payment[]
+}
+
+model Room {
+  id        String     @id @default(cuid())
+  user1Id   String
+  user2Id   String
+  status    RoomStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  userId    String
+  xenditId  String   @unique
+  amount    Int
+  status    String   @default("PENDING")
+  type      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+enum Status {
+  IDLE
+  SEARCHING
+  LIVE
+}
+
+enum RoomStatus {
+  ACTIVE
+  ENDED
+}

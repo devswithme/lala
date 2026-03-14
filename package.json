@@ -1,0 +1,26 @@
+{
+  "name": "lala",
+  "version": "1.0.0",
+  "description": "Lala — AI curhat companion bot for Telegram",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.js",
+    "start": "bun src/server.js",
+    "db:generate": "bunx prisma generate",
+    "db:migrate": "bunx prisma migrate deploy",
+    "db:push": "bunx prisma db push",
+    "db:studio": "bunx prisma studio"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.4.2",
+    "@prisma/client": "latest",
+    "openai": "^6.27.0",
+    "pg": "^8.20.0",
+    "telegraf": "latest",
+    "xendit-node": "latest"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.5",
+    "prisma": "latest"
+  }
+}
