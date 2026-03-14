@@ -9,6 +9,9 @@ services:
       - .env
     ports:
       - "3002:3002"
+    networks:
+      - nginx
 
-volumes:
-  db_data:
+networks:
+  nginx:
+    external: true
