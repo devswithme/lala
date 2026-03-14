@@ -2,12 +2,15 @@ FROM oven/bun:1
 
 WORKDIR /app
 
-# Install dependencies
+# Install dependencies (include dev for Prisma CLI)
 COPY package.json ./
-RUN bun install --production
+RUN bun install
 
 # Copy application source
 COPY . .
+
+# Generate Prisma client at build time
+RUN bunx prisma generate
 
 ENV NODE_ENV=production
 
