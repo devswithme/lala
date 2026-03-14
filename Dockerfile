@@ -13,5 +13,5 @@ ENV NODE_ENV=production
 
 EXPOSE 3000
 
-# Run database migrations then start the server
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun src/server.js"]
+# Start the server (DB schema is managed separately)
+CMD ["bun", "src/server.js"]
