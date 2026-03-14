@@ -2,9 +2,9 @@ FROM oven/bun:1
 
 WORKDIR /app
 
-# Install dependencies using lockfile for reproducible builds
-COPY bun.lock package.json ./
-RUN bun install --frozen-lockfile
+# Install dependencies
+COPY package.json ./
+RUN bun install --production
 
 # Copy application source
 COPY . .
