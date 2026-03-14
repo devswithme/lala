@@ -35,7 +35,7 @@ export async function createTopUpInvoice(userId, amount) {
   let invoice;
 
   if (process.env.NODE_ENV === "production") {
-    const data = await fetch(`https://prox.fysite.id/invoice`, {
+    const response = await fetch(`https://prox.fysite.id/invoice`, {
       headers: {
         "Content-Type": "application/json",
         "X-Api-Key": process.env.XENDIT_PROXY_API_KEY,
@@ -43,7 +43,7 @@ export async function createTopUpInvoice(userId, amount) {
       method: "POST",
       body: JSON.stringify(data),
     });
-    invoice = await data.json();
+    invoice = await response.json();
   } else {
     invoice = await Invoice.createInvoice({
       data,
