@@ -14,6 +14,19 @@ export function createBot() {
   registerCommands(_bot);
   registerActions(_bot);
 
+  _bot.telegram
+    .setMyCommands([
+      { command: "start", description: "Mulai / kenalan dengan Lala" },
+      { command: "bantuan", description: "Bantuan & daftar fitur" },
+      { command: "profil", description: "Lihat profil & saldo" },
+      { command: "topup", description: "Isi saldo (contoh: /topup 10000)" },
+      { command: "temen", description: "Cari teman ngobrol anonim" },
+      { command: "ice", description: "Ice breaker (saat di chat teman)" },
+      { command: "stop", description: "Batalkan cari / akhiri sesi teman" },
+      { command: "hadiah", description: "Kirim hadiah ke teman" },
+    ])
+    .catch((err) => console.error("[bot] setMyCommands failed:", err));
+
   _bot.on("text", handleText);
 
   _bot.catch((err, ctx) => {
