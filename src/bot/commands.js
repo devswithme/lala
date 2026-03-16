@@ -24,22 +24,14 @@ export async function cmdStart(ctx) {
   await ensureUser(userId);
 
   const user = await getUser(userId);
-
-  if (user?.tallyDone) {
-    const name = user.name ? `, ${user.name}` : "";
-    return ctx.reply(
-      `Hei${name}! Lala udah kenal kamu 🌸\n\nKetik apa aja buat mulai ngobrol. Kalau butuh bantuan ketik /bantuan ya!`,
-      { parse_mode: "HTML" }
-    );
-  }
-
   const formUrl = `${TALLY_FORM_URL}?id=${userId}`;
 
   return ctx.reply(
     `Halo! Aku Lala 🌸 seneng banget kamu mau kenalan sama aku!\n\n` +
-      `Sebelum kita mulai ngobrol, aku mau kenal kamu dulu dong — biar Lala bisa jadi teman yang beneran ngerti kamu.\n\n` +
-      `Yuk isi form singkat ini dulu ya:\n👉 <a href="${formUrl}">Kenalan sama Lala</a>\n\n` +
-      `Setelah form diisi, Lala langsung siap dengerin kamu! 💬`,
+      `Biar Lala bisa jadi teman yang beneran ngerti kamu, kamu <b>bisa (opsional)</b> isi form singkat ini dulu:\n` +
+      `👉 <a href="${formUrl}">Kenalan sama Lala</a>\n\n` +
+      `Tapi kalau kamu mau langsung mulai curhat tanpa isi form, nggak apa-apa juga kok — ketik aja apa yang lagi kamu rasain sekarang 💬\n\n` +
+      `Kalau butuh bantuan, ketik /bantuan ya!`,
     { parse_mode: "HTML", disable_web_page_preview: true }
   );
 }
@@ -71,7 +63,13 @@ export async function cmdProfil(ctx) {
   const user = await getUser(userId);
 
   if (!user?.tallyDone) {
-    return ctx.reply("Kamu belum isi form Lala dulu nih! Ketik /start ya.");
+    const formUrl = `${TALLY_FORM_URL}?id=${userId}`;
+    return ctx.reply(
+      `Kamu belum isi form profil Lala nih.\n\n` +
+        `Form ini <b>opsional</b>, tapi kalau kamu mau, isi di sini ya:\n` +
+        `👉 <a href="${formUrl}">Isi Profil</a>`,
+      { parse_mode: "HTML", disable_web_page_preview: true }
+    );
   }
 
   const genderLabel =
@@ -106,10 +104,6 @@ export async function cmdTopup(ctx) {
   const userId = String(ctx.from.id);
   const user = await getUser(userId);
 
-  if (!user?.tallyDone) {
-    return ctx.reply("Isi form Lala dulu ya! Ketik /start.");
-  }
-
   const args = ctx.message.text.split(" ");
   const amount = parseInt(args[1], 10);
 
@@ -139,10 +133,6 @@ export async function cmdTopup(ctx) {
 export async function cmdTemen(ctx) {
   const userId = String(ctx.from.id);
   const user = await getUser(userId);
-
-  if (!user?.tallyDone) {
-    return ctx.reply("Isi form Lala dulu ya! Ketik /start.");
-  }
 
   if (user.status === "LIVE") {
     return ctx.reply(
@@ -195,10 +185,6 @@ export async function cmdTemen(ctx) {
 export async function cmdIce(ctx) {
   const userId = String(ctx.from.id);
   const user = await getUser(userId);
-
-  if (!user?.tallyDone) {
-    return ctx.reply("Isi form Lala dulu ya! Ketik /start.");
-  }
 
   if (user.status !== "LIVE") {
     return ctx.reply(
@@ -268,7 +254,7 @@ export async function sendGiftKeyboard(ctx) {
   const userId = String(ctx.from.id);
   const user = await getUser(userId);
 
-  if (!user?.tallyDone || user.status !== "LIVE") {
+  if (user.status !== "LIVE") {
     return ctx.reply("Hadiah hanya bisa dikirim saat kamu lagi ngobrol sama teman.");
   }
 

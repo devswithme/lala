@@ -1,5 +1,5 @@
 import { Markup } from "telegraf";
-import { TALLY_FORM_URL, AI_DAILY_LIMIT, AI_EXTEND_PRICE, AI_EXTEND_BONUS } from "../config/index.js";
+import { AI_DAILY_LIMIT, AI_EXTEND_PRICE, AI_EXTEND_BONUS } from "../config/index.js";
 import {
   ensureUser,
   getUser,
@@ -24,15 +24,6 @@ export async function handleText(ctx) {
   // Ensure user row exists
   await ensureUser(userId);
   const user = await getUser(userId);
-
-  // ── Tally gate ──────────────────────────────────────────────────────────────
-  if (!user?.tallyDone) {
-    const formUrl = `${TALLY_FORM_URL}?id=${userId}`;
-    return ctx.reply(
-      `Hei! Lala belum kenal kamu nih 🥺\n\nIsi form singkat ini dulu biar Lala bisa kenal kamu lebih baik:\n👉 <a href="${formUrl}">Kenalan sama Lala</a>`,
-      { parse_mode: "HTML", disable_web_page_preview: true }
-    );
-  }
 
   // ── Live room relay ──────────────────────────────────────────────────────────
   if (user.status === "LIVE" && user.roomId) {
