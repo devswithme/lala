@@ -5,6 +5,9 @@ WORKDIR /app
 # Install dependencies (include dev for Prisma CLI)
 COPY package.json ./
 RUN bun install
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy application source
 COPY . .
