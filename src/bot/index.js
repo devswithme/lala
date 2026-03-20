@@ -24,6 +24,7 @@ export function createBot() {
       { command: "ice", description: "Ice breaker (saat di chat teman)" },
       { command: "stop", description: "Batalkan cari / akhiri sesi teman" },
       { command: "hadiah", description: "Kirim hadiah ke teman" },
+      { command: "wrap", description: "Buat gambar quote 1:1 dari ringkasan" },
     ])
     .catch((err) => console.error("[bot] setMyCommands failed:", err));
 

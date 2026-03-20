@@ -21,6 +21,11 @@ model User {
   balance        Int      @default(0)
   status         Status   @default(IDLE)
   roomId         String?
+  lastChatAt     DateTime?
+  lastNudgeAt    DateTime?
+  toxicCount     Int      @default(0)
+  diaryEntry     String?
+  diaryWrittenAt DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

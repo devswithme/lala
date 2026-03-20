@@ -35,3 +35,20 @@ export function isSelfHarmSignal(text) {
   ];
   return patterns.some((re) => re.test(text));
 }
+
+/**
+ * Returns true if the user is dismissing or pushing away Lala.
+ * Used to trigger a respectful boundary response instead of a normal AI reply.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function isDismissiveOfLala(text) {
+  const patterns = [
+    /\b(gak\s*usah|jangan)\s*(chat|dm|hubungi|ganggu|contact)/i,
+    /\b(stop|berhenti)\s*(chat|dm|hubungi|nge-?chat)/i,
+    /\b(pergi|minggat|leave\s*me)\b/i,
+    /\b(ganggu\s*(aja|terus|mulu)|jangan\s*ganggu)\b/i,
+    /\b(diem\s*aja|diam\s*aja)\b/i,
+  ];
+  return patterns.some((re) => re.test(text));
+}

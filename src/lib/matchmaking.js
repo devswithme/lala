@@ -26,7 +26,7 @@ export async function findMatch(userId, concerns = []) {
   // Score by concern overlap, then FIFO
   const scored = candidates.map((c) => {
     const overlap = (c.concerns ?? []).filter((concern) =>
-      concerns.includes(concern)
+      concerns.includes(concern),
     ).length;
     return { user: c, overlap };
   });

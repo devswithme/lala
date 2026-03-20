@@ -14,6 +14,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "latest",
+    "@resvg/resvg-js": "^2.6.2",
     "openai": "^6.27.0",
     "pg": "^8.20.0",
     "telegraf": "latest",

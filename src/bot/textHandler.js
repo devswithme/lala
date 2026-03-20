@@ -1,15 +1,23 @@
 import { Markup } from "telegraf";
-import { AI_DAILY_LIMIT, AI_EXTEND_PRICE, AI_EXTEND_BONUS } from "../config/index.js";
+import {
+  AI_DAILY_LIMIT,
+  AI_EXTEND_PRICE,
+  AI_EXTEND_BONUS,
+} from "../config/index.js";
 import {
   ensureUser,
   getUser,
   getRoomPartner,
   checkAndIncrementAi,
   saveHistory,
+  updateLastChatAt,
+  incrementToxicCount,
+  decrementToxicCount,
 } from "../db/index.js";
-import { chat } from "../ai/curhat.js";
-import { isNegativeContent, isSelfHarmSignal } from "../lib/content.js";
+import { chat, deriveMood } from "../ai/curhat.js";
+import { isNegativeContent, isSelfHarmSignal, isDismissiveOfLala } from "../lib/content.js";
 import { sendSafeDM } from "./index.js";
+import { sleep, randomBetween, sendWithTyping } from "../lib/typing.js";
 
 /**
  * Main text message handler — handles both curhat (1:1 with Lala)
@@ -41,14 +49,18 @@ async function handleRoomMessage(ctx, user, text) {
 
   const partnerId = await getRoomPartner(userId);
   if (!partnerId) {
-    return ctx.reply("Hmm, Lala nggak nemu teman chatmu. Ketik /stop lalu /temen lagi ya.");
+    return ctx.reply(
+      "Hmm, Lala nggak nemu teman chatmu. Ketik /stop lalu /temen lagi ya.",
+    );
   }
 
-  // Moderation check
+  // Moderation check — toxic messages degrade Lala's mood for this user
   if (isNegativeContent(text)) {
+    await incrementToxicCount(userId);
+
     await ctx.reply(
       `⚠️ <b>Lala perlu ingatkan:</b>\n\nYuk jaga obrolan kita tetap positif dan nyaman buat semua orang. Lala selalu ada buat dengerin kalian, tapi tolong hormati satu sama lain ya 💗`,
-      { parse_mode: "HTML" }
+      { parse_mode: "HTML" },
     );
 
     // Also warn partner
@@ -56,7 +68,7 @@ async function handleRoomMessage(ctx, user, text) {
       ctx.telegram,
       partnerId,
       `⚠️ <b>Lala perlu ingatkan:</b>\n\nAda pesan yang terdeteksi kurang nyaman. Lala minta kalian jaga obrolan tetap positif ya 💗`,
-      { parse_mode: "HTML" }
+      { parse_mode: "HTML" },
     );
     return;
   }
@@ -64,7 +76,7 @@ async function handleRoomMessage(ctx, user, text) {
   // Self-harm signal — Lala responds with care, still relay
   if (isSelfHarmSignal(text)) {
     await ctx.reply(
-      `💗 Lala dengerin kamu. Kalau lagi berat banget, nggak ada salahnya minta bantuan profesional ya. Kamu nggak sendirian!`
+      `💗 Lala dengerin kamu. Kalau lagi berat banget, nggak ada salahnya minta bantuan profesional ya. Kamu nggak sendirian!`,
     );
   }
 
@@ -84,12 +96,20 @@ async function handleCurhat(ctx, user, text) {
         `Kalau kamu lagi beneran ngerasa nggak kuat, tolong hubungi Into The Light Indonesia ya:\n` +
         `📞 <b>119 ext 8</b> (hotline 24 jam)\n\n` +
         `Kamu nggak sendirian. Lala ada di sini.`,
-      { parse_mode: "HTML" }
+      { parse_mode: "HTML" },
+    );
+  }
+
+  // Dismissive — user is pushing Lala away; respect it and back off
+  if (isDismissiveOfLala(text)) {
+    await incrementToxicCount(userId);
+    return ctx.reply(
+      "Oh, maaf ya kalau aku ganggu. Aku bakal diem dulu kalau gitu. Chat aja kalau udah butuh ya.",
     );
   }
 
   // Check AI quota
-  const { allowed, count } = await checkAndIncrementAi(userId, AI_DAILY_LIMIT);
+  const { allowed } = await checkAndIncrementAi(userId, AI_DAILY_LIMIT);
 
   if (!allowed) {
     return ctx.reply(
@@ -99,26 +119,60 @@ async function handleCurhat(ctx, user, text) {
       {
         parse_mode: "HTML",
         ...Markup.inlineKeyboard([
-          [Markup.button.callback(`💳 Perpanjang Rp ${AI_EXTEND_PRICE.toLocaleString("id-ID")}`, "ai_extend")],
+          [
+            Markup.button.callback(
+              `💳 Perpanjang Rp ${AI_EXTEND_PRICE.toLocaleString("id-ID")}`,
+              "ai_extend",
+            ),
+          ],
         ]),
-      }
+      },
     );
   }
 
-  // Show typing indicator
+  // Derive Lala's current mood from recent toxic count
+  const narrativeMood = deriveMood(user.toxicCount ?? 0);
+
+  // Non-toxic message: slowly cool down the mood score
+  if (!isNegativeContent(text)) {
+    await decrementToxicCount(userId);
+  }
+
+  // 1. Show typing immediately so user sees a reaction
   await ctx.sendChatAction("typing");
 
+  // 2. Thinking delay — Lala "reads" the message before she starts typing
+  await sleep(randomBetween(1500, 2500));
+
+  // 3. Keep the typing indicator alive every 4 s while waiting on the AI
+  const keepTyping = setInterval(
+    () => ctx.sendChatAction("typing").catch(() => {}),
+    4000,
+  );
+
+  let reply, history, historySummary;
   try {
-    const { reply, history, historySummary } = await chat({ user, userText: text });
-
-    // Save updated history
-    await saveHistory(userId, history, historySummary);
-
-    return ctx.reply(reply);
+    ({ reply, history, historySummary } = await chat({
+      user,
+      userText: text,
+      narrativeMood,
+    }));
   } catch (err) {
+    clearInterval(keepTyping);
     console.error("[curhat] AI error:", err);
     return ctx.reply(
-      "Aduh, Lala lagi nggak bisa mikir sekarang 😔 Coba lagi sebentar ya!"
+      "Aduh, Lala lagi nggak bisa mikir sekarang 😔 Coba lagi sebentar ya!",
     );
   }
+
+  clearInterval(keepTyping);
+
+  // Save updated history and mark last chat time
+  await Promise.all([
+    saveHistory(userId, history, historySummary),
+    updateLastChatAt(userId),
+  ]);
+
+  // 4. Typing simulation + optional split send
+  await sendWithTyping(ctx, reply, narrativeMood);
 }

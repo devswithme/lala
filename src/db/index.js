@@ -156,7 +156,8 @@ export async function checkAndIncrementAi(userId, dailyLimit) {
   const needsReset = user.aiResetAt < todayMidnight;
   const currentCount = needsReset ? 0 : user.aiCount;
 
-  if (currentCount >= dailyLimit) return { allowed: false, count: currentCount };
+  if (currentCount >= dailyLimit)
+    return { allowed: false, count: currentCount };
 
   await prisma.user.update({
     where: { id: String(userId) },
@@ -174,6 +175,40 @@ export async function extendAiQuota(userId, bonus) {
   return prisma.user.update({
     where: { id: String(userId) },
     data: { aiCount: { decrement: bonus } },
+  });
+}
+
+// ─── Proactive state ──────────────────────────────────────────────────────────
+
+/** Mark that user just had a curhat exchange. */
+export async function updateLastChatAt(userId) {
+  return prisma.user.update({
+    where: { id: String(userId) },
+    data: { lastChatAt: new Date() },
+  });
+}
+
+/** Increment toxicCount (called when negative content detected in curhat). */
+export async function incrementToxicCount(userId) {
+  return prisma.user.update({
+    where: { id: String(userId) },
+    data: { toxicCount: { increment: 1 } },
+  });
+}
+
+/**
+ * Decrement toxicCount toward 0 (called on normal, non-toxic curhat message).
+ * Uses a raw update guarded by a WHERE clause to avoid going below 0.
+ */
+export async function decrementToxicCount(userId) {
+  const user = await prisma.user.findUnique({
+    where: { id: String(userId) },
+    select: { toxicCount: true },
+  });
+  if (!user || user.toxicCount <= 0) return;
+  return prisma.user.update({
+    where: { id: String(userId) },
+    data: { toxicCount: { decrement: 1 } },
   });
 }
 

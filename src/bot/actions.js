@@ -1,10 +1,16 @@
 import { Markup } from "telegraf";
-import { GIFTS, GIFT_LABELS, AI_EXTEND_PRICE, AI_EXTEND_BONUS } from "../config/index.js";
+import {
+  GIFTS,
+  GIFT_LABELS,
+  AI_EXTEND_PRICE,
+  AI_EXTEND_BONUS,
+} from "../config/index.js";
 import {
   getUser,
   createRoom,
   getRoomPartner,
   deductBalance,
+  upsertUser,
 } from "../db/index.js";
 import { findMatch } from "../lib/matchmaking.js";
 import { createAiExtendInvoice } from "../payments/xendit.js";
@@ -26,12 +32,14 @@ async function handleAcceptMatch(ctx, targetId) {
   await ctx.answerCbQuery();
 
   if (!user || !target) {
-    return ctx.editMessageText("Hmm, teman ini udah nggak ada di antrian. Coba /temen lagi ya!");
+    return ctx.editMessageText(
+      "Hmm, teman ini udah nggak ada di antrian. Coba /temen lagi ya!",
+    );
   }
 
   if (user.status !== "SEARCHING" || target.status !== "SEARCHING") {
     return ctx.editMessageText(
-      "Salah satu dari kalian udah nggak tersedia. Coba /temen lagi ya!"
+      "Salah satu dari kalian udah nggak tersedia. Coba /temen lagi ya!",
     );
   }
 
@@ -47,7 +55,7 @@ async function handleAcceptMatch(ctx, targetId) {
   // Room only after both accepted
   if (pending.acceptedBy.size < 2) {
     await ctx.editMessageText(
-      "✅ Kamu udah setuju! Sekarang nunggu teman kamu setuju ya 💬"
+      "✅ Kamu udah setuju! Sekarang nunggu teman kamu setuju ya 💬",
     );
     await sendSafeDM(
       ctx.telegram,
@@ -58,7 +66,7 @@ async function handleAcceptMatch(ctx, targetId) {
           Markup.button.callback("✅ Mau ngobrol", `accept_match_${userId}`),
           Markup.button.callback("❌ Nggak dulu", `decline_match_${userId}`),
         ],
-      ])
+      ]),
     );
     return;
   }
@@ -95,29 +103,35 @@ async function handleDeclineMatch(ctx, targetId) {
     if (nextMatch) {
       const keyboard = Markup.inlineKeyboard([
         [
-          Markup.button.callback("✅ Mau ngobrol", `accept_match_${nextMatch.id}`),
-          Markup.button.callback("❌ Nggak dulu", `decline_match_${nextMatch.id}`),
+          Markup.button.callback(
+            "✅ Mau ngobrol",
+            `accept_match_${nextMatch.id}`,
+          ),
+          Markup.button.callback(
+            "❌ Nggak dulu",
+            `decline_match_${nextMatch.id}`,
+          ),
         ],
       ]);
       return ctx.editMessageText(
         `🌟 Lala nemuin teman lain yang mungkin cocok!\n\nMau ngobrol sama dia?`,
-        keyboard
+        keyboard,
       );
     }
     return ctx.editMessageText(
-      "Nggak apa-apa! Lala masih nyariin teman lain buat kamu ya 🔍"
+      "Nggak apa-apa! Lala masih nyariin teman lain buat kamu ya 🔍",
     );
   }
 
   await ctx.editMessageText(
-    "Oke, Lala masih nyariin yang lain buat kamu ya 🔍"
+    "Oke, Lala masih nyariin yang lain buat kamu ya 🔍",
   );
 
   // Notify the person who initiated the match (targetId) that their offer was declined
   await sendSafeDM(
     ctx.telegram,
     targetId,
-    "Hmm, teman ini lagi nggak bisa ya. Lala masih nyariin teman lain! 🔍"
+    "Hmm, teman ini lagi nggak bisa ya. Lala masih nyariin teman lain! 🔍",
   );
 }
 
@@ -137,30 +151,34 @@ async function handleGift(ctx, giftKey) {
 
   const user = await getUser(userId);
   if (!user || user.status !== "LIVE") {
-    return ctx.editMessageText("Kamu harus lagi ngobrol sama teman dulu buat kirim hadiah!");
+    return ctx.editMessageText(
+      "Kamu harus lagi ngobrol sama teman dulu buat kirim hadiah!",
+    );
   }
 
   const partnerId = await getRoomPartner(userId);
   if (!partnerId) {
-    return ctx.editMessageText("Teman chatmu nggak ketemu. Coba /stop lalu /temen lagi.");
+    return ctx.editMessageText(
+      "Teman chatmu nggak ketemu. Coba /stop lalu /temen lagi.",
+    );
   }
 
   const updated = await deductBalance(userId, price);
   if (!updated) {
     return ctx.editMessageText(
       `Saldo kamu nggak cukup buat kirim ${label} (Rp ${price.toLocaleString("id-ID")}).\n` +
-        `Isi saldo dulu dengan /topup ya!`
+        `Isi saldo dulu dengan /topup ya!`,
     );
   }
 
   await ctx.editMessageText(
-    `${label} berhasil dikirim! 🎉\nSaldo tersisa: Rp ${updated.balance.toLocaleString("id-ID")}`
+    `${label} berhasil dikirim! 🎉\nSaldo tersisa: Rp ${updated.balance.toLocaleString("id-ID")}`,
   );
 
   await sendSafeDM(
     ctx.telegram,
     partnerId,
-    `🎁 Kamu dapat kiriman ${label} dari temanmu!\n\nLala ikut seneng~ 💗`
+    `🎁 Kamu dapat kiriman ${label} dari temanmu!\n\nLala ikut seneng~ 💗`,
   );
 }
 
@@ -176,12 +194,27 @@ async function handleAiExtend(ctx) {
       `💳 Invoice perpanjang AI dibuat!\n\n` +
         `Bayar <b>Rp ${AI_EXTEND_PRICE.toLocaleString("id-ID")}</b> untuk dapat +${AI_EXTEND_BONUS} respons lagi hari ini.\n\n` +
         `👉 <a href="${invoiceUrl}">Bayar Sekarang</a>`,
-      { parse_mode: "HTML", disable_web_page_preview: true }
+      { parse_mode: "HTML", disable_web_page_preview: true },
     );
   } catch (err) {
     console.error("[ai_extend]", err);
     return ctx.editMessageText("Gagal buat invoice. Coba lagi ya!");
   }
+}
+
+// ─── Tally skip ─────────────────────────────────────────────────────────────
+async function handleSkipTally(ctx) {
+  const userId = String(ctx.from.id);
+  await ctx.answerCbQuery();
+
+  // Treat "skip" as "done" so we don't prompt again on future /start.
+  await upsertUser(userId, { tallyDone: true });
+
+  return ctx.editMessageText(
+    `Oke! Nggak apa-apa kok, kamu nggak perlu isi form dulu 🌸\n\n` +
+      `Ceritain aja apa yang lagi kamu rasain sekarang 💬\n\n` +
+      `Kalau butuh bantuan, ketik /bantuan ya!`,
+  );
 }
 
 // ─── Register ─────────────────────────────────────────────────────────────────
@@ -206,4 +239,7 @@ export function registerActions(bot) {
 
   // AI quota extension
   bot.action("ai_extend", handleAiExtend);
+
+  // Tally skip
+  bot.action("skip_tally", handleSkipTally);
 }

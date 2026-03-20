@@ -2,8 +2,10 @@ import { PORT, WEBHOOK_BASE_URL, isProduction } from "./config/index.js";
 import { createBot, sendSafeDM } from "./bot/index.js";
 import { upsertUser, prisma } from "./db/index.js";
 import { handleXenditWebhook } from "./payments/xendit.js";
+import { startScheduler } from "./lib/scheduler.js";
 
 const bot = createBot();
+startScheduler(bot);
 
 // ─── Tally webhook ────────────────────────────────────────────────────────────
 
@@ -36,7 +38,8 @@ function mapConcern(optionText = "") {
 }
 
 async function handleTallyWebhook(body) {
-  if (body.eventType !== "FORM_RESPONSE") return new Response("ok", { status: 200 });
+  if (body.eventType !== "FORM_RESPONSE")
+    return new Response("ok", { status: 200 });
 
   const { submissionId, fields } = body.data ?? {};
   if (!submissionId || !fields) return new Response("ok", { status: 200 });
@@ -53,7 +56,7 @@ async function handleTallyWebhook(body) {
     fields.find((f) => f.label === label)?.value ?? null;
 
   const hiddenId = fields.find(
-    (f) => f.type === "HIDDEN_FIELDS" && f.label === "id"
+    (f) => f.type === "HIDDEN_FIELDS" && f.label === "id",
   )?.value;
 
   if (!hiddenId) return new Response("ok", { status: 200 });
@@ -62,22 +65,27 @@ async function handleTallyWebhook(body) {
   const name = getValue("Lala harus panggil kamu siapa?") ?? null;
 
   // Gender — dropdown returns array of selected option IDs
-  const genderField = fields.find((f) => f.label === "Lala biar nggak salah panggil...");
+  const genderField = fields.find(
+    (f) => f.label === "Lala biar nggak salah panggil...",
+  );
   const genderOptionId = genderField?.value?.[0] ?? null;
   const genderOptionText =
     genderField?.options?.find((o) => o.id === genderOptionId)?.text ?? "";
   const gender = mapGender(genderOptionText);
 
   // Occupation
-  const occupationField = fields.find((f) => f.label === "Sekarang lagi sibuk apa?");
+  const occupationField = fields.find(
+    (f) => f.label === "Sekarang lagi sibuk apa?",
+  );
   const occupationOptionId = occupationField?.value?.[0] ?? null;
   const occupationOptionText =
-    occupationField?.options?.find((o) => o.id === occupationOptionId)?.text ?? "";
+    occupationField?.options?.find((o) => o.id === occupationOptionId)?.text ??
+    "";
   const occupation = mapOccupation(occupationOptionText);
 
   // Concerns — multiple choice, returns array of option IDs
   const concernsField = fields.find((f) =>
-    f.label.includes("paling sering bikin kamu kepikiran")
+    f.label.includes("paling sering bikin kamu kepikiran"),
   );
   const concernOptionIds = concernsField?.value ?? [];
   const concerns = concernOptionIds
@@ -108,7 +116,7 @@ async function handleTallyWebhook(body) {
       `Lala udah nerima info kamu. Sekarang kita bisa mulai ngobrol!\n\n` +
       `Ketik aja apa yang lagi ada di pikiranmu — Lala siap dengerin kamu 💬\n\n` +
       `Butuh bantuan? Ketik /bantuan`,
-    { parse_mode: "HTML" }
+    { parse_mode: "HTML" },
   );
 
   return new Response("ok", { status: 200 });
