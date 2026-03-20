@@ -15,7 +15,11 @@ import {
   decrementToxicCount,
 } from "../db/index.js";
 import { chat, deriveMood } from "../ai/curhat.js";
-import { isNegativeContent, isSelfHarmSignal, isDismissiveOfLala } from "../lib/content.js";
+import {
+  isNegativeContent,
+  isSelfHarmSignal,
+  isDismissiveOfLala,
+} from "../lib/content.js";
 import { sendSafeDM } from "./index.js";
 import { sleep, randomBetween, sendWithTyping } from "../lib/typing.js";
 

@@ -16,7 +16,7 @@ export const TALLY_FORM_URL = "https://tally.so/r/xXQVy9";
 export const AI_DAILY_LIMIT = 30;
 export const AI_EXTEND_PRICE = 5000;
 export const AI_EXTEND_BONUS = 30;
-export const AI_MODEL = "google/gemini-2.0-flash-001";
+export const AI_MODEL = "google/gemini-2.5-flash-lite";
 
 // Topup
 export const TOPUP_MIN = 5000;
