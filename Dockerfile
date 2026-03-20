@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json ./
 RUN bun install
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends fontconfig fonts-dejavu-core \
+  && apt-get install -y --no-install-recommends fontconfig fonts-liberation2 \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy application source

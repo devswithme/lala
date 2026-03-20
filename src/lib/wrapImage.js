@@ -93,7 +93,7 @@ function buildWrapSvg(quote) {
   const fontSize = 72;
   const lineHeight = 78;
   const authorFontSize = 36;
-  const quoteToAuthorGap = 70;
+  const quoteToAuthorGap = 100;
   const maxQuoteLines = 5; // keep space for the author line
 
   // Approximation: average glyph width for Times at this size.
@@ -129,7 +129,7 @@ function buildWrapSvg(quote) {
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <rect width="${width}" height="${height}" fill="#ffffff"/>
   <text x="${leftMargin}" y="${startY}" text-anchor="start"
-        font-family="Times New Roman, Times, serif"
+        font-family="Liberation Serif, Times New Roman, Times, serif"
         font-weight="bold"
         letter-spacing="-0.025em"
         font-size="${fontSize}" fill="#000000">
@@ -137,7 +137,7 @@ function buildWrapSvg(quote) {
   </text>
 
   <text x="${leftMargin}" y="${authorY}" text-anchor="start"
-        font-family="Times New Roman, Times, serif"
+        font-family="Liberation Serif, Times New Roman, Times, serif"
         font-style="italic"
         font-size="${authorFontSize}" fill="#000000">
     ${escapeXml("Lala " + "$DATE")}

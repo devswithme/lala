@@ -1,7 +1,7 @@
-const CHAR_DELAY_MS = 60;
-const MAX_DELAY_MS = 8000;
-const THINKING_MIN = 1500;
-const THINKING_MAX = 2500;
+const CHAR_DELAY_MS = 30;
+const MAX_DELAY_MS = 4000;
+const THINKING_MIN = 750;
+const THINKING_MAX = 1250;
 
 export const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
